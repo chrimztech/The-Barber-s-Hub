@@ -16,10 +16,10 @@ import { Route as CheckoutRouteImport } from './routes/checkout'
 import { Route as CartRouteImport } from './routes/cart'
 import { Route as BookRouteImport } from './routes/book'
 import { Route as AuthRouteImport } from './routes/auth'
-import { Route as AccountRouteImport } from './routes/account'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
+import { Route as AccountIndexRouteImport } from './routes/account.index'
 import { Route as ShopSlugRouteImport } from './routes/shop.$slug'
 import { Route as ServicesSlugRouteImport } from './routes/services.$slug'
 import { Route as AuthResetRouteImport } from './routes/auth.reset'
@@ -72,11 +72,6 @@ const AuthRoute = AuthRouteImport.update({
   path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AccountRoute = AccountRouteImport.update({
-  id: '/account',
-  path: '/account',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const AboutRoute = AboutRouteImport.update({
   id: '/about',
   path: '/about',
@@ -90,6 +85,11 @@ const IndexRoute = IndexRouteImport.update({
 const AdminIndexRoute = AdminIndexRouteImport.update({
   id: '/admin/',
   path: '/admin/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AccountIndexRoute = AccountIndexRouteImport.update({
+  id: '/account/',
+  path: '/account/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ShopSlugRoute = ShopSlugRouteImport.update({
@@ -176,7 +176,6 @@ const AccountOrdersIdRoute = AccountOrdersIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
-  '/account': typeof AccountRouteWithChildren
   '/auth': typeof AuthRouteWithChildren
   '/book': typeof BookRoute
   '/cart': typeof CartRoute
@@ -199,13 +198,13 @@ export interface FileRoutesByFullPath {
   '/auth/reset': typeof AuthResetRoute
   '/services/$slug': typeof ServicesSlugRoute
   '/shop/$slug': typeof ShopSlugRoute
+  '/account/': typeof AccountIndexRoute
   '/admin/': typeof AdminIndexRoute
   '/account/orders/$id': typeof AccountOrdersIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
-  '/account': typeof AccountRouteWithChildren
   '/auth': typeof AuthRouteWithChildren
   '/book': typeof BookRoute
   '/cart': typeof CartRoute
@@ -228,6 +227,7 @@ export interface FileRoutesByTo {
   '/auth/reset': typeof AuthResetRoute
   '/services/$slug': typeof ServicesSlugRoute
   '/shop/$slug': typeof ShopSlugRoute
+  '/account': typeof AccountIndexRoute
   '/admin': typeof AdminIndexRoute
   '/account/orders/$id': typeof AccountOrdersIdRoute
 }
@@ -235,7 +235,6 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
-  '/account': typeof AccountRouteWithChildren
   '/auth': typeof AuthRouteWithChildren
   '/book': typeof BookRoute
   '/cart': typeof CartRoute
@@ -258,6 +257,7 @@ export interface FileRoutesById {
   '/auth/reset': typeof AuthResetRoute
   '/services/$slug': typeof ServicesSlugRoute
   '/shop/$slug': typeof ShopSlugRoute
+  '/account/': typeof AccountIndexRoute
   '/admin/': typeof AdminIndexRoute
   '/account/orders/$id': typeof AccountOrdersIdRoute
 }
@@ -266,7 +266,6 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/about'
-    | '/account'
     | '/auth'
     | '/book'
     | '/cart'
@@ -289,13 +288,13 @@ export interface FileRouteTypes {
     | '/auth/reset'
     | '/services/$slug'
     | '/shop/$slug'
+    | '/account/'
     | '/admin/'
     | '/account/orders/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/about'
-    | '/account'
     | '/auth'
     | '/book'
     | '/cart'
@@ -318,13 +317,13 @@ export interface FileRouteTypes {
     | '/auth/reset'
     | '/services/$slug'
     | '/shop/$slug'
+    | '/account'
     | '/admin'
     | '/account/orders/$id'
   id:
     | '__root__'
     | '/'
     | '/about'
-    | '/account'
     | '/auth'
     | '/book'
     | '/cart'
@@ -347,6 +346,7 @@ export interface FileRouteTypes {
     | '/auth/reset'
     | '/services/$slug'
     | '/shop/$slug'
+    | '/account/'
     | '/admin/'
     | '/account/orders/$id'
   fileRoutesById: FileRoutesById
@@ -354,7 +354,6 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AboutRoute: typeof AboutRoute
-  AccountRoute: typeof AccountRouteWithChildren
   AuthRoute: typeof AuthRouteWithChildren
   BookRoute: typeof BookRoute
   CartRoute: typeof CartRoute
@@ -372,6 +371,7 @@ export interface RootRouteChildren {
   AdminReviewsRoute: typeof AdminReviewsRoute
   AdminServicesRoute: typeof AdminServicesRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
+  AccountIndexRoute: typeof AccountIndexRoute
   AdminIndexRoute: typeof AdminIndexRoute
 }
 
@@ -426,13 +426,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/account': {
-      id: '/account'
-      path: '/account'
-      fullPath: '/account'
-      preLoaderRoute: typeof AccountRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/about': {
       id: '/about'
       path: '/about'
@@ -452,6 +445,13 @@ declare module '@tanstack/react-router' {
       path: '/admin'
       fullPath: '/admin/'
       preLoaderRoute: typeof AdminIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/account/': {
+      id: '/account/'
+      path: '/account'
+      fullPath: '/account/'
+      preLoaderRoute: typeof AccountIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/shop/$slug': {
@@ -569,21 +569,6 @@ declare module '@tanstack/react-router' {
   }
 }
 
-interface AccountRouteChildren {
-  AccountProfileRoute: typeof AccountProfileRoute
-  AccountReviewsRoute: typeof AccountReviewsRoute
-  AccountOrdersIdRoute: typeof AccountOrdersIdRoute
-}
-
-const AccountRouteChildren: AccountRouteChildren = {
-  AccountProfileRoute: AccountProfileRoute,
-  AccountReviewsRoute: AccountReviewsRoute,
-  AccountOrdersIdRoute: AccountOrdersIdRoute,
-}
-
-const AccountRouteWithChildren =
-  AccountRoute._addFileChildren(AccountRouteChildren)
-
 interface AuthRouteChildren {
   AuthResetRoute: typeof AuthResetRoute
 }
@@ -619,7 +604,6 @@ const ShopRouteWithChildren = ShopRoute._addFileChildren(ShopRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
-  AccountRoute: AccountRouteWithChildren,
   AuthRoute: AuthRouteWithChildren,
   BookRoute: BookRoute,
   CartRoute: CartRoute,
@@ -637,6 +621,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminReviewsRoute: AdminReviewsRoute,
   AdminServicesRoute: AdminServicesRoute,
   AdminSettingsRoute: AdminSettingsRoute,
+  AccountIndexRoute: AccountIndexRoute,
   AdminIndexRoute: AdminIndexRoute,
 }
 export const routeTree = rootRouteImport

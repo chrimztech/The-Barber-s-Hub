@@ -12,7 +12,7 @@ import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { supabase } from "@/integrations/supabase/client";
 import { formatCurrency, formatDate } from "@/lib/format";
 
-export const Route = createFileRoute("/account")({
+export const Route = createFileRoute("/account/")({
   head: () => ({ meta: [{ title: "My Account - Deepcuts Hair Studio" }] }),
   component: Account,
   errorComponent: RouteError,
@@ -26,6 +26,20 @@ function Account() {
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/auth" });
   }, [user, loading, navigate]);
+
+  const profile = useQuery({
+    enabled: !!user,
+    queryKey: ["my-profile", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("full_name")
+        .eq("id", user!.id)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
 
   const bookings = useQuery({
     enabled: !!user,
@@ -83,7 +97,7 @@ function Account() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="mb-2 text-xs uppercase tracking-[0.4em] text-primary">Welcome</p>
-            <h1 className="font-display text-4xl">{user.email}</h1>
+            <h1 className="font-display text-4xl">{profile.data?.full_name || user.email}</h1>
           </div>
           {isAdmin && (
             <Link to="/admin">
