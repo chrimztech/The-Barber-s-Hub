@@ -12,4 +12,12 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
+  // Outside Lovable's own build sandbox, nitro is skipped unless explicitly
+  // enabled here — without this, `vite build` on Vercel/CI only emits static
+  // client assets and there's no SSR server to route requests, hence 404s.
+  // Vercel sets process.env.VERCEL during its build, so we target its Build
+  // Output API there and fall back to the Cloudflare Workers preset everywhere else.
+  nitro: {
+    preset: process.env.VERCEL ? "vercel" : "cloudflare-module",
+  },
 });

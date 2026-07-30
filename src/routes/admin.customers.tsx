@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Eye, Search, ShieldCheck, UserRound } from "lucide-react";
+import { Ban, Eye, KeyRound, Search, ShieldCheck, UserCheck, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { AdminGuard } from "@/components/admin/AdminGuard";
 import { AdminEmptyState, AdminPageHeader, StatusBadge } from "@/components/admin/AdminUi";
@@ -64,6 +64,24 @@ function AdminCustomers() {
     },
   });
 
+  const bookingCounts = useQuery({
+    queryKey: ["admin-customer-booking-counts"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("bookings").select("user_id");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const orderCounts = useQuery({
+    queryKey: ["admin-customer-order-counts"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("orders").select("user_id");
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const adminIds = useMemo(
     () =>
       new Set(
@@ -71,6 +89,23 @@ function AdminCustomers() {
       ),
     [roles.data],
   );
+
+  const activityByUser = useMemo(() => {
+    const counts = new Map<string, { bookings: number; orders: number }>();
+    for (const row of bookingCounts.data ?? []) {
+      if (!row.user_id) continue;
+      const entry = counts.get(row.user_id) ?? { bookings: 0, orders: 0 };
+      entry.bookings += 1;
+      counts.set(row.user_id, entry);
+    }
+    for (const row of orderCounts.data ?? []) {
+      if (!row.user_id) continue;
+      const entry = counts.get(row.user_id) ?? { bookings: 0, orders: 0 };
+      entry.orders += 1;
+      counts.set(row.user_id, entry);
+    }
+    return counts;
+  }, [bookingCounts.data, orderCounts.data]);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -137,6 +172,33 @@ function AdminCustomers() {
     roles.refetch();
   };
 
+  const toggleStatus = async (profile: Profile) => {
+    if (profile.id === user?.id) {
+      toast.error("You cannot suspend your own account");
+      return;
+    }
+    const nextStatus = profile.status === "active" ? "suspended" : "active";
+    const { error } = await supabase
+      .from("profiles")
+      .update({ status: nextStatus })
+      .eq("id", profile.id);
+    if (error) return toast.error(error.message);
+    toast.success(nextStatus === "active" ? "Customer reactivated" : "Customer suspended");
+    profiles.refetch();
+  };
+
+  const sendPasswordReset = async (profile: Profile) => {
+    if (!profile.email) {
+      toast.error("This customer has no email on file");
+      return;
+    }
+    const { error } = await supabase.auth.resetPasswordForEmail(profile.email, {
+      redirectTo: `${window.location.origin}/auth/reset`,
+    });
+    if (error) return toast.error(error.message);
+    toast.success(`Password reset link sent to ${profile.email}`);
+  };
+
   return (
     <AdminGuard>
       <AdminPageHeader
@@ -185,9 +247,10 @@ function AdminCustomers() {
                 <TableHead>Customer</TableHead>
                 <TableHead className="hidden md:table-cell">Phone</TableHead>
                 <TableHead className="hidden lg:table-cell">Joined</TableHead>
+                <TableHead className="hidden lg:table-cell">Activity</TableHead>
                 <TableHead>Access</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="w-14">
+                <TableHead className="w-28">
                   <span className="sr-only">Actions</span>
                 </TableHead>
               </TableRow>
@@ -203,6 +266,10 @@ function AdminCustomers() {
                   <TableCell className="hidden lg:table-cell">
                     {formatDate(profile.created_at)}
                   </TableCell>
+                  <TableCell className="hidden lg:table-cell text-xs text-muted-foreground">
+                    {activityByUser.get(profile.id)?.bookings ?? 0} bookings ·{" "}
+                    {activityByUser.get(profile.id)?.orders ?? 0} orders
+                  </TableCell>
                   <TableCell>
                     <span className="inline-flex items-center gap-1.5 text-xs">
                       {adminIds.has(profile.id) ? (
@@ -217,15 +284,42 @@ function AdminCustomers() {
                     <StatusBadge status={profile.status} />
                   </TableCell>
                   <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => openProfile(profile)}
-                      title="Manage customer"
-                    >
-                      <Eye className="h-4 w-4" />
-                      <span className="sr-only">Manage customer</span>
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => openProfile(profile)}
+                        title="Manage customer"
+                      >
+                        <Eye className="h-4 w-4" />
+                        <span className="sr-only">Manage customer</span>
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => sendPasswordReset(profile)}
+                        title="Send password reset email"
+                      >
+                        <KeyRound className="h-4 w-4" />
+                        <span className="sr-only">Send password reset email</span>
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => toggleStatus(profile)}
+                        disabled={profile.id === user?.id}
+                        title={profile.status === "active" ? "Suspend customer" : "Reactivate customer"}
+                      >
+                        {profile.status === "active" ? (
+                          <Ban className="h-4 w-4 text-destructive" />
+                        ) : (
+                          <UserCheck className="h-4 w-4 text-emerald-500" />
+                        )}
+                        <span className="sr-only">
+                          {profile.status === "active" ? "Suspend customer" : "Reactivate customer"}
+                        </span>
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

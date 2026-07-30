@@ -25,7 +25,7 @@ function About() {
         <p className="text-primary text-xs tracking-[0.4em] uppercase mb-3">Our story</p>
         <h1 className="font-display text-5xl md:text-6xl">A craft. A chair. A community.</h1>
         <p className="text-muted-foreground mt-6 text-lg leading-relaxed">
-          Founded in 2014, Deepcuts Hair Studio began as a single chair in Chelston with one
+          Founded in 2014, Deepcuts Hair Studio began as a single chair in Chelstone with one
           obsession: a sharper, slower, more deliberate cut. A decade later we're a shop and a
           marketplace — curating the same gear our barbers reach for daily.
         </p>

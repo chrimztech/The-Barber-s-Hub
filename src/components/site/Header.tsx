@@ -21,11 +21,11 @@ export function Header() {
   return (
     <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-xl">
       <div className="container-x flex h-16 items-center justify-between">
-        <Link
-          to="/"
-          className="whitespace-nowrap font-display text-base tracking-widest text-foreground sm:text-xl"
-        >
-          DEEPCUTS <span className="hidden text-primary sm:inline">HAIR STUDIO</span>
+        <Link to="/" className="flex shrink-0 items-center gap-2">
+          <img src="/savior_logo.jpg" alt="Deepcuts Hair Studio" className="h-10 w-10 rounded-full object-cover" />
+          <span className="hidden whitespace-nowrap font-display text-base tracking-widest text-foreground sm:inline sm:text-xl">
+            DEEPCUTS <span className="text-primary">HAIR STUDIO</span>
+          </span>
         </Link>
         <nav className="hidden md:flex items-center gap-7 text-sm">
           {nav.map((n) => (

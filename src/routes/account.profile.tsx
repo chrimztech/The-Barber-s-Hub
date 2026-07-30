@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Save } from "lucide-react";
+import { Save, UserX } from "lucide-react";
 import { toast } from "sonner";
 import { AccountNav } from "@/components/account/AccountNav";
 import { SiteLayout } from "@/components/site/Layout";
@@ -19,13 +19,14 @@ export const Route = createFileRoute("/account/profile")({
 });
 
 function AccountProfile() {
-  const { user, loading } = useAuth();
+  const { user, loading, signOut } = useAuth();
   const navigate = useNavigate();
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
+  const [deactivating, setDeactivating] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/auth" });
@@ -78,6 +79,29 @@ function AccountProfile() {
     if (error) return toast.error(error.message);
     setPassword("");
     toast.success("Password updated");
+  };
+
+  const deactivateAccount = async () => {
+    if (!user) return;
+    if (
+      !confirm(
+        "Deactivate your account? You'll be signed out and won't be able to book or order until an admin reactivates you.",
+      )
+    ) {
+      return;
+    }
+    setDeactivating(true);
+    const { error } = await supabase
+      .from("profiles")
+      .update({ status: "suspended" })
+      .eq("id", user.id);
+    if (error) {
+      setDeactivating(false);
+      return toast.error(error.message);
+    }
+    await signOut();
+    toast.success("Your account has been deactivated");
+    navigate({ to: "/" });
   };
 
   if (loading || !user) {
@@ -146,6 +170,24 @@ function AccountProfile() {
               {savingPassword ? "Updating..." : "Update password"}
             </Button>
           </form>
+        </div>
+
+        <div className="mt-8 border border-destructive/40 p-6">
+          <h2 className="font-display text-2xl text-destructive">Danger zone</h2>
+          <p className="mt-2 max-w-lg text-sm text-muted-foreground">
+            Deactivating your account signs you out and blocks new bookings or orders until an
+            admin reactivates you. Your existing history is kept.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={deactivating}
+            onClick={deactivateAccount}
+            className="mt-4 border-destructive/60 text-destructive hover:bg-destructive/10"
+          >
+            <UserX className="mr-2 h-4 w-4" />
+            {deactivating ? "Deactivating..." : "Deactivate my account"}
+          </Button>
         </div>
       </section>
     </SiteLayout>

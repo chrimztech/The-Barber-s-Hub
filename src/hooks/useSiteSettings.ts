@@ -24,22 +24,22 @@ export type CommerceSettings = {
 
 export const defaultBusinessSettings: BusinessSettings = {
   business_name: "Deepcuts Hair Studio",
-  email: "hello@deepcutshairstudio.com",
-  phone: "+260 97 123 4567",
-  whatsapp: "+260 97 123 4567",
-  address: "Chelston, Lusaka, Zambia",
+  email: "saviourchinyantac2@gmail.com",
+  phone: "+260979011711",
+  whatsapp: "+260979011711",
+  address: "Chelstone Small Market, Lusaka, Zambia",
   hours: "Tue-Sat 9am-8pm · Sun 10am-4pm · Closed Mon",
-  instagram: "https://instagram.com",
-  facebook: "https://facebook.com",
+  instagram: "https://instagram.com/DEEPCUTZM",
+  facebook: "https://facebook.com/DEEPCUTSZM",
   twitter: "https://twitter.com",
-  tiktok: "https://tiktok.com",
-  youtube: "https://youtube.com",
+  tiktok: "https://tiktok.com/@deepcutsbarbershop1",
+  youtube: "https://youtube.com/@deepcutszm",
 };
 
 export const defaultCommerceSettings: CommerceSettings = {
   currency: "ZMW",
   delivery_fee: 15,
-  pickup_address: "Chelston, Lusaka, Zambia",
+  pickup_address: "Chelstone Small Market, Lusaka, Zambia",
   low_stock_threshold: 5,
 };
 
