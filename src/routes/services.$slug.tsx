@@ -92,7 +92,7 @@ function ServiceDetail() {
               )}
             </div>
             {images.length > 1 && (
-              <div className="mt-3 grid grid-cols-5 gap-2">
+              <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5">
                 {images.map((image) => (
                   <button
                     key={image}
