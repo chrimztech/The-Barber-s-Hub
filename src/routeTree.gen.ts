@@ -158,19 +158,19 @@ const AdminBarbersRoute = AdminBarbersRouteImport.update({
   getParentRoute: () => rootRouteImport,
 } as any)
 const AccountReviewsRoute = AccountReviewsRouteImport.update({
-  id: '/reviews',
-  path: '/reviews',
-  getParentRoute: () => AccountRoute,
+  id: '/account/reviews',
+  path: '/account/reviews',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AccountProfileRoute = AccountProfileRouteImport.update({
-  id: '/profile',
-  path: '/profile',
-  getParentRoute: () => AccountRoute,
+  id: '/account/profile',
+  path: '/account/profile',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AccountOrdersIdRoute = AccountOrdersIdRouteImport.update({
-  id: '/orders/$id',
-  path: '/orders/$id',
-  getParentRoute: () => AccountRoute,
+  id: '/account/orders/$id',
+  path: '/account/orders/$id',
+  getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -361,6 +361,8 @@ export interface RootRouteChildren {
   ContactRoute: typeof ContactRoute
   ServicesRoute: typeof ServicesRouteWithChildren
   ShopRoute: typeof ShopRouteWithChildren
+  AccountProfileRoute: typeof AccountProfileRoute
+  AccountReviewsRoute: typeof AccountReviewsRoute
   AdminBarbersRoute: typeof AdminBarbersRoute
   AdminBookingsRoute: typeof AdminBookingsRoute
   AdminCategoriesRoute: typeof AdminCategoriesRoute
@@ -373,6 +375,7 @@ export interface RootRouteChildren {
   AdminSettingsRoute: typeof AdminSettingsRoute
   AccountIndexRoute: typeof AccountIndexRoute
   AdminIndexRoute: typeof AdminIndexRoute
+  AccountOrdersIdRoute: typeof AccountOrdersIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -547,24 +550,24 @@ declare module '@tanstack/react-router' {
     }
     '/account/reviews': {
       id: '/account/reviews'
-      path: '/reviews'
+      path: '/account/reviews'
       fullPath: '/account/reviews'
       preLoaderRoute: typeof AccountReviewsRouteImport
-      parentRoute: typeof AccountRoute
+      parentRoute: typeof rootRouteImport
     }
     '/account/profile': {
       id: '/account/profile'
-      path: '/profile'
+      path: '/account/profile'
       fullPath: '/account/profile'
       preLoaderRoute: typeof AccountProfileRouteImport
-      parentRoute: typeof AccountRoute
+      parentRoute: typeof rootRouteImport
     }
     '/account/orders/$id': {
       id: '/account/orders/$id'
-      path: '/orders/$id'
+      path: '/account/orders/$id'
       fullPath: '/account/orders/$id'
       preLoaderRoute: typeof AccountOrdersIdRouteImport
-      parentRoute: typeof AccountRoute
+      parentRoute: typeof rootRouteImport
     }
   }
 }
@@ -611,6 +614,8 @@ const rootRouteChildren: RootRouteChildren = {
   ContactRoute: ContactRoute,
   ServicesRoute: ServicesRouteWithChildren,
   ShopRoute: ShopRouteWithChildren,
+  AccountProfileRoute: AccountProfileRoute,
+  AccountReviewsRoute: AccountReviewsRoute,
   AdminBarbersRoute: AdminBarbersRoute,
   AdminBookingsRoute: AdminBookingsRoute,
   AdminCategoriesRoute: AdminCategoriesRoute,
@@ -623,6 +628,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminSettingsRoute: AdminSettingsRoute,
   AccountIndexRoute: AccountIndexRoute,
   AdminIndexRoute: AdminIndexRoute,
+  AccountOrdersIdRoute: AccountOrdersIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
