@@ -6,7 +6,8 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
+import { api, errorMessage } from "@/lib/api/client";
+import type { PublicReview } from "@/lib/api/types";
 import { formatDate } from "@/lib/format";
 
 type ReviewTarget = { type: "product"; id: string } | { type: "service"; id: string };
@@ -19,20 +20,10 @@ export function ReviewSection({ target }: { target: ReviewTarget }) {
 
   const reviews = useQuery({
     queryKey: ["public-reviews", target.type, target.id],
-    queryFn: async () => {
-      let request = supabase
-        .from("reviews")
-        .select("id,rating,comment,created_at")
-        .eq("status", "approved")
-        .order("created_at", { ascending: false });
-      request =
-        target.type === "product"
-          ? request.eq("product_id", target.id)
-          : request.eq("service_id", target.id);
-      const { data, error } = await request;
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () =>
+      api.get<PublicReview[]>("/reviews", {
+        [target.type === "product" ? "product_id" : "service_id"]: target.id,
+      }),
   });
 
   const submit = async (event: React.FormEvent) => {
@@ -40,16 +31,18 @@ export function ReviewSection({ target }: { target: ReviewTarget }) {
     if (!user) return;
     if (comment.trim().length < 3) return toast.error("Please add a short comment");
     setSaving(true);
-    const { error } = await supabase.from("reviews").insert({
-      user_id: user.id,
-      rating,
-      comment: comment.trim(),
-      status: "pending",
-      product_id: target.type === "product" ? target.id : null,
-      service_id: target.type === "service" ? target.id : null,
-    });
+    try {
+      await api.post("/reviews", {
+        rating,
+        comment: comment.trim(),
+        product_id: target.type === "product" ? target.id : null,
+        service_id: target.type === "service" ? target.id : null,
+      });
+    } catch (error) {
+      setSaving(false);
+      return toast.error(errorMessage(error));
+    }
     setSaving(false);
-    if (error) return toast.error(error.message);
     setComment("");
     setRating(5);
     toast.success("Review submitted for approval");

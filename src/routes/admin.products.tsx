@@ -3,7 +3,8 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AdminGuard } from "@/components/admin/AdminGuard";
 import { ImageUpload } from "@/components/admin/ImageUpload";
-import { supabase } from "@/integrations/supabase/client";
+import { api, errorMessage } from "@/lib/api/client";
+import type { Category, Product } from "@/lib/api/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,8 +20,6 @@ import { toast } from "sonner";
 import { Pencil, Trash2, Plus } from "lucide-react";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { formatCurrency } from "@/lib/format";
-import type { Tables } from "@/integrations/supabase/types";
-import type { Json } from "@/integrations/supabase/types";
 import {
   GalleryEditor,
   SpecificationEditor,
@@ -83,20 +82,18 @@ function AdminProducts() {
 
   const products = useQuery({
     queryKey: ["admin-products"],
-    queryFn: async () =>
-      (await supabase.from("products").select("*").order("created_at", { ascending: false }))
-        .data ?? [],
+    queryFn: () => api.get<Product[]>("/admin/products"),
   });
   const cats = useQuery({
     queryKey: ["product-cats"],
-    queryFn: async () => (await supabase.from("product_categories").select("id,name")).data ?? [],
+    queryFn: () => api.get<Category[]>("/admin/categories/product"),
   });
 
   const openNew = () => {
     setForm(empty);
     setOpen(true);
   };
-  const openEdit = (p: Tables<"products">) => {
+  const openEdit = (p: Product) => {
     setForm({
       id: p.id,
       name: p.name,
@@ -139,24 +136,25 @@ function AdminProducts() {
       return toast.error("Discount price must be less than the regular price");
     if (!Number.isInteger(stockQuantity) || stockQuantity < 0)
       return toast.error("Stock quantity must be a non-negative whole number");
-    const { gallery_images, specifications, ...fields } = form;
+    const { id, specifications, ...fields } = form;
     const payload = {
       ...fields,
       slug: form.slug || slugify(form.name),
       price,
       discount_price: discountPrice,
       stock_quantity: stockQuantity,
-      gallery_images: gallery_images as Json,
       specifications: Object.fromEntries(
         specifications
           .filter((item) => item.key.trim())
           .map((item) => [item.key.trim(), item.value.trim()]),
-      ) as Json,
+      ),
     };
-    const { error } = form.id
-      ? await supabase.from("products").update(payload).eq("id", form.id)
-      : await supabase.from("products").insert(payload);
-    if (error) return toast.error(error.message);
+    try {
+      if (id) await api.put(`/admin/products/${id}`, payload);
+      else await api.post("/admin/products", payload);
+    } catch (error) {
+      return toast.error(errorMessage(error));
+    }
     toast.success("Saved");
     setOpen(false);
     products.refetch();
@@ -164,8 +162,11 @@ function AdminProducts() {
 
   const remove = async (id: string) => {
     if (!confirm("Delete this product?")) return;
-    const { error } = await supabase.from("products").delete().eq("id", id);
-    if (error) return toast.error(error.message);
+    try {
+      await api.delete(`/admin/products/${id}`);
+    } catch (error) {
+      return toast.error(errorMessage(error));
+    }
     toast.success("Deleted");
     products.refetch();
   };

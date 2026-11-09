@@ -2,12 +2,12 @@ import { useRouter } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { SiteLayout } from "@/components/site/Layout";
 import { Button } from "@/components/ui/button";
-import { reportLovableError } from "@/lib/lovable-error-reporting";
+import { reportError } from "@/lib/error-reporting";
 
 export function RouteError({ error, reset }: { error: Error; reset: () => void }) {
   const router = useRouter();
   useEffect(() => {
-    reportLovableError(error, { boundary: "route" });
+    reportError(error, { boundary: "route" });
   }, [error]);
   return (
     <SiteLayout>

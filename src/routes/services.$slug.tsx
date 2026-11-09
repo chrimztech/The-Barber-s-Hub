@@ -7,7 +7,8 @@ import { ReviewSection } from "@/components/site/ReviewSection";
 import { RouteError } from "@/components/site/RouteError";
 import { Button } from "@/components/ui/button";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/lib/api/client";
+import type { Service } from "@/lib/api/types";
 import { formatCurrency } from "@/lib/format";
 
 export const Route = createFileRoute("/services/$slug")({
@@ -22,16 +23,8 @@ function ServiceDetail() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const service = useQuery({
     queryKey: ["service", slug],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("services")
-        .select("*, service_categories(name)")
-        .eq("slug", slug)
-        .eq("status", "active")
-        .single();
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => api.get<Service>(`/services/${encodeURIComponent(slug)}`),
+    retry: false,
   });
 
   if (service.isLoading) {
@@ -57,9 +50,9 @@ function ServiceDetail() {
   }
 
   const item = service.data;
-  const category = (item.service_categories as { name?: string } | null)?.name ?? "Barbering";
+  const category = item.service_categories?.name ?? "Barbering";
   const gallery = Array.isArray(item.gallery_images)
-    ? item.gallery_images.filter((image): image is string => typeof image === "string")
+    ? item.gallery_images.filter((image) => typeof image === "string")
     : [];
   const images = [item.image_url, ...gallery].filter(
     (image, index, list): image is string =>

@@ -24,8 +24,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { supabase } from "@/integrations/supabase/client";
-import type { Tables } from "@/integrations/supabase/types";
+import { api, errorMessage } from "@/lib/api/client";
+import type { ContactMessage } from "@/lib/api/types";
 import { formatDate } from "@/lib/format";
 
 export const Route = createFileRoute("/admin/messages")({
@@ -33,7 +33,7 @@ export const Route = createFileRoute("/admin/messages")({
   component: AdminMessages,
 });
 
-type Message = Tables<"contact_messages">;
+type Message = ContactMessage;
 
 function AdminMessages() {
   const [query, setQuery] = useState("");
@@ -44,14 +44,7 @@ function AdminMessages() {
 
   const messages = useQuery({
     queryKey: ["admin-messages"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("contact_messages")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => api.get<Message[]>("/admin/messages"),
   });
 
   const filtered = useMemo(() => {
@@ -72,18 +65,21 @@ function AdminMessages() {
     setMessageStatus(message.status === "unread" ? "read" : message.status);
     setAdminNote(message.admin_note ?? "");
     if (message.status === "unread") {
-      await supabase.from("contact_messages").update({ status: "read" }).eq("id", message.id);
+      await api.patch(`/admin/messages/${message.id}`, { status: "read" }).catch(() => undefined);
       messages.refetch();
     }
   };
 
   const save = async () => {
     if (!selected) return;
-    const { error } = await supabase
-      .from("contact_messages")
-      .update({ status: messageStatus, admin_note: adminNote.trim() || null })
-      .eq("id", selected.id);
-    if (error) return toast.error(error.message);
+    try {
+      await api.patch(`/admin/messages/${selected.id}`, {
+        status: messageStatus,
+        admin_note: adminNote.trim() || null,
+      });
+    } catch (error) {
+      return toast.error(errorMessage(error));
+    }
     toast.success("Enquiry updated");
     setSelected(null);
     messages.refetch();
@@ -91,8 +87,11 @@ function AdminMessages() {
 
   const remove = async () => {
     if (!selected || !confirm("Permanently delete this enquiry?")) return;
-    const { error } = await supabase.from("contact_messages").delete().eq("id", selected.id);
-    if (error) return toast.error(error.message);
+    try {
+      await api.delete(`/admin/messages/${selected.id}`);
+    } catch (error) {
+      return toast.error(errorMessage(error));
+    }
     toast.success("Enquiry deleted");
     setSelected(null);
     messages.refetch();
@@ -134,7 +133,7 @@ function AdminMessages() {
         </div>
       ) : messages.isError ? (
         <AdminEmptyState>
-          Enquiries could not be loaded. Apply the latest Supabase migration, then refresh.
+          Enquiries could not be loaded. Check that the API is running, then refresh.
         </AdminEmptyState>
       ) : filtered.length === 0 ? (
         <AdminEmptyState>No enquiries match the current filters.</AdminEmptyState>

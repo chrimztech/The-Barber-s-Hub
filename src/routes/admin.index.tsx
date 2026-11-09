@@ -1,7 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { AdminGuard } from "@/components/admin/AdminGuard";
-import { supabase } from "@/integrations/supabase/client";
+import { api, errorMessage } from "@/lib/api/client";
+import type { AdminStats, Booking, Order } from "@/lib/api/types";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
@@ -14,75 +15,49 @@ export const Route = createFileRoute("/admin/")({
 
 function AdminOverview() {
   const { commerce } = useSiteSettings();
-  const stats = useQuery({
+  const statsQuery = useQuery({
     queryKey: ["admin-stats", commerce.low_stock_threshold],
-    queryFn: async () => {
-      const [svc, prod, book, ord, cust, low] = await Promise.all([
-        supabase.from("services").select("id", { count: "exact", head: true }),
-        supabase.from("products").select("id", { count: "exact", head: true }),
-        supabase
-          .from("bookings")
-          .select("id", { count: "exact", head: true })
-          .eq("status", "pending"),
-        supabase
-          .from("orders")
-          .select("id", { count: "exact", head: true })
-          .eq("order_status", "pending"),
-        supabase.from("profiles").select("id", { count: "exact", head: true }),
-        supabase
-          .from("products")
-          .select("id", { count: "exact", head: true })
-          .lte("stock_quantity", commerce.low_stock_threshold),
-      ]);
-      return {
-        svc: svc.count,
-        prod: prod.count,
-        book: book.count,
-        ord: ord.count,
-        cust: cust.count,
-        low: low.count,
-      };
-    },
+    queryFn: () => api.get<AdminStats>("/admin/stats"),
   });
+  const stats = {
+    data: statsQuery.data && {
+      svc: statsQuery.data.services,
+      prod: statsQuery.data.products,
+      book: statsQuery.data.pending_bookings,
+      ord: statsQuery.data.pending_orders,
+      cust: statsQuery.data.customers,
+      low: statsQuery.data.low_stock,
+    },
+  };
 
   const bookings = useQuery({
     queryKey: ["admin-bookings"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("bookings")
-          .select("*, services(name)")
-          .order("created_at", { ascending: false })
-          .limit(10)
-      ).data ?? [],
+    queryFn: () => api.get<Booking[]>("/admin/bookings", { recent: true, limit: 10 }),
   });
 
   const orders = useQuery({
     queryKey: ["admin-orders"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("orders")
-          .select("*")
-          .order("created_at", { ascending: false })
-          .limit(10)
-      ).data ?? [],
+    queryFn: () => api.get<Order[]>("/admin/orders", { limit: 10 }),
   });
 
   const updateBooking = async (id: string, status: string) => {
-    const { error } = await supabase.from("bookings").update({ status }).eq("id", id);
-    if (error) toast.error(error.message);
-    else {
+    try {
+      await api.patch(`/admin/bookings/${id}`, { status });
       toast.success("Updated");
       bookings.refetch();
+      statsQuery.refetch();
+    } catch (error) {
+      toast.error(errorMessage(error));
     }
   };
   const updateOrder = async (id: string, order_status: string) => {
-    const { error } = await supabase.from("orders").update({ order_status }).eq("id", id);
-    if (error) toast.error(error.message);
-    else {
+    try {
+      await api.patch(`/admin/orders/${id}`, { order_status });
       toast.success("Updated");
       orders.refetch();
+      statsQuery.refetch();
+    } catch (error) {
+      toast.error(errorMessage(error));
     }
   };
 
@@ -117,7 +92,7 @@ function AdminOverview() {
           <div key={b.id} className="p-4 flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="font-medium">
-                {b.customer_name} · {(b.services as { name?: string } | null)?.name}
+                {b.customer_name} · {b.services?.name}
               </div>
               <div className="text-sm text-muted-foreground">
                 {b.booking_date} {b.booking_time} · {b.customer_phone}

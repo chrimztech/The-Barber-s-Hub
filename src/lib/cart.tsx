@@ -16,6 +16,7 @@ type Ctx = {
   clear: () => void;
   subtotal: number;
   count: number;
+  ready: boolean;
 };
 
 const CartCtx = createContext<Ctx | null>(null);
@@ -23,6 +24,8 @@ const KEY = "gentry_cart";
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
+  // False until the saved cart has been read, so pages don't act on the empty initial state.
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     try {
@@ -31,11 +34,17 @@ export function CartProvider({ children }: { children: ReactNode }) {
     } catch {
       /* ignore */
     }
+    setReady(true);
   }, []);
 
   useEffect(() => {
-    if (typeof window !== "undefined") localStorage.setItem(KEY, JSON.stringify(items));
-  }, [items]);
+    if (!ready) return;
+    try {
+      localStorage.setItem(KEY, JSON.stringify(items));
+    } catch {
+      /* storage unavailable */
+    }
+  }, [items, ready]);
 
   const add: Ctx["add"] = (i, qty = 1) => {
     setItems((prev) => {
@@ -56,7 +65,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const count = items.reduce((s, i) => s + i.quantity, 0);
 
   return (
-    <CartCtx.Provider value={{ items, add, remove, setQty, clear, subtotal, count }}>
+    <CartCtx.Provider value={{ items, add, remove, setQty, clear, subtotal, count, ready }}>
       {children}
     </CartCtx.Provider>
   );

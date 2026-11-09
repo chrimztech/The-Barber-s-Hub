@@ -1,0 +1,58 @@
+# Render blueprint for the Barber's Hub API + Postgres.
+# In Render: New > Blueprint > pick this repo. Then fill in the "sync: false" values
+# (PUBLIC_API_URL, APP_URL, CORS_ORIGIN, ADMIN_*, SMTP_*) in the service's Environment tab.
+# The storefront stays on Vercel; set VITE_API_URL there to this service's URL.
+
+databases:
+  - name: barbers-hub-db
+    plan: basic-256mb
+    databaseName: barbers_hub
+    user: barbers_hub
+
+services:
+  - type: web
+    name: barbers-hub-api
+    runtime: docker
+    rootDir: server
+    dockerfilePath: ./Dockerfile
+    plan: starter # disks need a paid instance
+    healthCheckPath: /health
+    disk:
+      name: uploads
+      mountPath: /app/uploads
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: barbers-hub-db
+          property: connectionString
+      - key: DATABASE_SSL
+        value: "false" # Render's internal connection doesn't use TLS
+      - key: JWT_SECRET
+        generateValue: true
+      - key: TIMEZONE
+        value: Africa/Lusaka
+      - key: PUBLIC_API_URL
+        sync: false
+      - key: APP_URL
+        sync: false
+      - key: CORS_ORIGIN
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false

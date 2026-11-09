@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/useAuth";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
-import { supabase } from "@/integrations/supabase/client";
+import { api, errorMessage } from "@/lib/api/client";
 
 export const Route = createFileRoute("/contact")({
   head: () => ({
@@ -49,15 +49,19 @@ function Contact() {
     const parsed = schema.safeParse(form);
     if (!parsed.success) return toast.error(parsed.error.issues[0].message);
     setSaving(true);
-    const { error } = await supabase.from("contact_messages").insert({
-      ...parsed.data,
-      email: parsed.data.email || null,
-      phone: parsed.data.phone || null,
-      user_id: user?.id ?? null,
-    });
+    try {
+      await api.post("/contact", {
+        ...parsed.data,
+        email: parsed.data.email || null,
+        phone: parsed.data.phone || null,
+      });
+    } catch (error) {
+      setSaving(false);
+      return toast.error(
+        errorMessage(error, "Your message could not be sent. Please call or email us instead."),
+      );
+    }
     setSaving(false);
-    if (error)
-      return toast.error("Your message could not be sent. Please call or email us instead.");
     setForm({ ...form, subject: "", message: "" });
     toast.success("Message sent. We will get back to you shortly.");
   };

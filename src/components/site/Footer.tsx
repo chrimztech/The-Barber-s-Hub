@@ -17,7 +17,11 @@ export function Footer() {
       <div className="container-x grid gap-10 py-14 md:grid-cols-4">
         <div className="md:col-span-2">
           <div className="flex items-center gap-3">
-            <img src="/savior_logo.jpg" alt="Deepcuts Hair Studio" className="h-12 w-12 rounded-full object-cover" />
+            <img
+              src="/savior_logo.jpg"
+              alt="Deepcuts Hair Studio"
+              className="h-12 w-12 rounded-full object-cover"
+            />
             <div className="font-display text-2xl tracking-widest">
               DEEPCUTS <span className="text-primary">HAIR STUDIO</span>
             </div>

@@ -15,7 +15,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { supabase } from "@/integrations/supabase/client";
+import { api, errorMessage } from "@/lib/api/client";
+import type { Review } from "@/lib/api/types";
 import { formatDate } from "@/lib/format";
 
 export const Route = createFileRoute("/admin/reviews")({
@@ -29,21 +30,14 @@ function AdminReviews() {
 
   const reviews = useQuery({
     queryKey: ["admin-reviews"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("reviews")
-        .select("*, products(name), services(name)")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => api.get<Review[]>("/admin/reviews"),
   });
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return (reviews.data ?? []).filter((review) => {
-      const productName = (review.products as { name?: string } | null)?.name ?? "";
-      const serviceName = (review.services as { name?: string } | null)?.name ?? "";
+      const productName = review.products?.name ?? "";
+      const serviceName = review.services?.name ?? "";
       const matches =
         !needle ||
         review.comment?.toLowerCase().includes(needle) ||
@@ -54,16 +48,22 @@ function AdminReviews() {
   }, [query, reviews.data, status]);
 
   const setReviewStatus = async (id: string, nextStatus: string) => {
-    const { error } = await supabase.from("reviews").update({ status: nextStatus }).eq("id", id);
-    if (error) return toast.error(error.message);
+    try {
+      await api.patch(`/admin/reviews/${id}`, { status: nextStatus });
+    } catch (error) {
+      return toast.error(errorMessage(error));
+    }
     toast.success(nextStatus === "approved" ? "Review published" : "Review rejected");
     reviews.refetch();
   };
 
   const remove = async (id: string) => {
     if (!confirm("Permanently delete this review?")) return;
-    const { error } = await supabase.from("reviews").delete().eq("id", id);
-    if (error) return toast.error(error.message);
+    try {
+      await api.delete(`/admin/reviews/${id}`);
+    } catch (error) {
+      return toast.error(errorMessage(error));
+    }
     toast.success("Review deleted");
     reviews.refetch();
   };
@@ -122,10 +122,7 @@ function AdminReviews() {
             </TableHeader>
             <TableBody>
               {filtered.map((review) => {
-                const item =
-                  (review.products as { name?: string } | null)?.name ??
-                  (review.services as { name?: string } | null)?.name ??
-                  "Removed item";
+                const item = review.products?.name ?? review.services?.name ?? "Removed item";
                 return (
                   <TableRow key={review.id}>
                     <TableCell>

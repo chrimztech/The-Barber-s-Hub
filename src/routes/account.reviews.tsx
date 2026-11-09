@@ -9,7 +9,8 @@ import { SiteLayout } from "@/components/site/Layout";
 import { RouteError } from "@/components/site/RouteError";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
+import { api, errorMessage } from "@/lib/api/client";
+import type { Review } from "@/lib/api/types";
 import { formatDate } from "@/lib/format";
 
 export const Route = createFileRoute("/account/reviews")({
@@ -28,21 +29,16 @@ function AccountReviews() {
   const reviews = useQuery({
     enabled: !!user,
     queryKey: ["my-reviews", user?.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("reviews")
-        .select("*, products(name), services(name)")
-        .eq("user_id", user!.id)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => api.get<Review[]>("/me/reviews"),
   });
 
   const remove = async (id: string) => {
     if (!confirm("Delete this review?")) return;
-    const { error } = await supabase.from("reviews").delete().eq("id", id);
-    if (error) return toast.error(error.message);
+    try {
+      await api.delete(`/me/reviews/${id}`);
+    } catch (error) {
+      return toast.error(errorMessage(error));
+    }
     toast.success("Review deleted");
     reviews.refetch();
   };
@@ -77,10 +73,7 @@ function AccountReviews() {
         ) : (
           <div className="divide-y divide-border border-y border-border">
             {reviews.data!.map((review) => {
-              const item =
-                (review.products as { name?: string } | null)?.name ??
-                (review.services as { name?: string } | null)?.name ??
-                "Removed item";
+              const item = review.products?.name ?? review.services?.name ?? "Removed item";
               return (
                 <article
                   key={review.id}

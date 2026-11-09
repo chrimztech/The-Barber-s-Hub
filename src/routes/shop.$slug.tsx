@@ -8,7 +8,8 @@ import { ReviewSection } from "@/components/site/ReviewSection";
 import { RouteError } from "@/components/site/RouteError";
 import { Button } from "@/components/ui/button";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/lib/api/client";
+import type { Product } from "@/lib/api/types";
 import { useCart } from "@/lib/cart";
 import { formatCurrency } from "@/lib/format";
 
@@ -27,16 +28,8 @@ function ProductDetail() {
 
   const product = useQuery({
     queryKey: ["product", slug],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("products")
-        .select("*, product_categories(name)")
-        .eq("slug", slug)
-        .eq("status", "active")
-        .single();
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => api.get<Product>(`/products/${encodeURIComponent(slug)}`),
+    retry: false,
   });
 
   if (product.isLoading) {
@@ -65,10 +58,9 @@ function ProductDetail() {
   const price = Number(item.discount_price ?? item.price);
   const inCart = items.find((cartItem) => cartItem.id === item.id)?.quantity ?? 0;
   const available = Math.max(0, item.stock_quantity - inCart);
-  const category =
-    (item.product_categories as { name?: string } | null)?.name ?? "Grooming equipment";
+  const category = item.product_categories?.name ?? "Grooming equipment";
   const gallery = Array.isArray(item.gallery_images)
-    ? item.gallery_images.filter((image): image is string => typeof image === "string")
+    ? item.gallery_images.filter((image) => typeof image === "string")
     : [];
   const images = [item.image_url, ...gallery].filter(
     (image, index, list): image is string =>

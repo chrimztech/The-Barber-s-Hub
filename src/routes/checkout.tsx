@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
 import { SiteLayout } from "@/components/site/Layout";
@@ -10,8 +10,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/useAuth";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
-import { supabase } from "@/integrations/supabase/client";
-import type { Json } from "@/integrations/supabase/types";
+import { api, errorMessage } from "@/lib/api/client";
+import { PaymentInstructions } from "@/components/site/PaymentInstructions";
 import { useCart } from "@/lib/cart";
 import { formatCurrency } from "@/lib/format";
 
@@ -32,24 +32,36 @@ const schema = z.object({
 });
 
 function Checkout() {
-  const { items, subtotal, clear } = useCart();
+  const { items, subtotal, clear, ready } = useCart();
   const { user } = useAuth();
   const { commerce } = useSiteSettings();
   const navigate = useNavigate();
   const [form, setForm] = useState({
-    customer_name: "",
-    customer_email: "",
-    customer_phone: "",
+    customer_name: user?.full_name ?? "",
+    customer_email: user?.email ?? "",
+    customer_phone: user?.phone ?? "",
     delivery_address: "",
     delivery_method: "delivery",
     payment_method: "cash_on_delivery",
     order_note: "",
   });
   const [saving, setSaving] = useState(false);
+  const placedRef = useRef(false);
 
   useEffect(() => {
-    if (items.length === 0) navigate({ to: "/cart" });
-  }, [items.length, navigate]);
+    if (ready && items.length === 0 && !placedRef.current) navigate({ to: "/cart" });
+  }, [ready, items.length, navigate]);
+
+  // Pre-fill contact details from the account once the session has loaded.
+  useEffect(() => {
+    if (!user) return;
+    setForm((current) => ({
+      ...current,
+      customer_name: current.customer_name || user.full_name || "",
+      customer_email: current.customer_email || user.email,
+      customer_phone: current.customer_phone || user.phone || "",
+    }));
+  }, [user]);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -65,22 +77,20 @@ function Checkout() {
     }
 
     setSaving(true);
-    const { data, error } = await supabase.rpc("place_order", {
-      _order: {
+    let order: { id: string; order_number: string; total: number };
+    try {
+      order = await api.post("/orders", {
         ...parsed.data,
         customer_email: form.customer_email || null,
-      } as unknown as Json,
-      _items: items.map((item) => ({
-        product_id: item.id,
-        quantity: item.quantity,
-      })) as unknown as Json,
-    });
-    setSaving(false);
-    if (error || !data) {
-      toast.error(error?.message ?? "Order could not be placed");
+        items: items.map((item) => ({ product_id: item.id, quantity: item.quantity })),
+      });
+    } catch (error) {
+      setSaving(false);
+      toast.error(errorMessage(error, "Order could not be placed"));
       return;
     }
-    const order = data as { id: string; order_number: string; total: number };
+    setSaving(false);
+    placedRef.current = true;
     clear();
     toast.success(`Order ${order.order_number} placed`);
     navigate({ to: "/account/orders/$id", params: { id: order.id } });
@@ -164,6 +174,11 @@ function Checkout() {
                 <option value="bank_transfer">Bank transfer</option>
               </select>
             </div>
+            {form.payment_method !== "cash_on_delivery" && (
+              <div className="md:col-span-2">
+                <PaymentInstructions method={form.payment_method} />
+              </div>
+            )}
             <div className="md:col-span-2">
               <Label>Order note</Label>
               <Textarea

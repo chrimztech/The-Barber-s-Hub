@@ -24,8 +24,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
-import type { Tables } from "@/integrations/supabase/types";
+import { api, errorMessage } from "@/lib/api/client";
+import type { AdminCustomer } from "@/lib/api/types";
 import { formatDate } from "@/lib/format";
 
 export const Route = createFileRoute("/admin/customers")({
@@ -33,7 +33,7 @@ export const Route = createFileRoute("/admin/customers")({
   component: AdminCustomers,
 });
 
-type Profile = Tables<"profiles">;
+type Profile = AdminCustomer;
 
 function AdminCustomers() {
   const { user } = useAuth();
@@ -45,67 +45,26 @@ function AdminCustomers() {
 
   const profiles = useQuery({
     queryKey: ["admin-customers"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => api.get<Profile[]>("/admin/customers"),
   });
-
-  const roles = useQuery({
-    queryKey: ["admin-user-roles"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("user_roles").select("*");
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  const bookingCounts = useQuery({
-    queryKey: ["admin-customer-booking-counts"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("bookings").select("user_id");
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  const orderCounts = useQuery({
-    queryKey: ["admin-customer-order-counts"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("orders").select("user_id");
-      if (error) throw error;
-      return data;
-    },
-  });
+  // Roles and activity counts come back on each customer row.
+  const roles = { isLoading: false, isError: false };
 
   const adminIds = useMemo(
-    () =>
-      new Set(
-        (roles.data ?? []).filter((role) => role.role === "admin").map((role) => role.user_id),
-      ),
-    [roles.data],
+    () => new Set((profiles.data ?? []).filter((p) => p.isAdmin).map((p) => p.id)),
+    [profiles.data],
   );
 
-  const activityByUser = useMemo(() => {
-    const counts = new Map<string, { bookings: number; orders: number }>();
-    for (const row of bookingCounts.data ?? []) {
-      if (!row.user_id) continue;
-      const entry = counts.get(row.user_id) ?? { bookings: 0, orders: 0 };
-      entry.bookings += 1;
-      counts.set(row.user_id, entry);
-    }
-    for (const row of orderCounts.data ?? []) {
-      if (!row.user_id) continue;
-      const entry = counts.get(row.user_id) ?? { bookings: 0, orders: 0 };
-      entry.orders += 1;
-      counts.set(row.user_id, entry);
-    }
-    return counts;
-  }, [bookingCounts.data, orderCounts.data]);
+  const activityByUser = useMemo(
+    () =>
+      new Map(
+        (profiles.data ?? []).map((p) => [
+          p.id,
+          { bookings: p.booking_count, orders: p.order_count },
+        ]),
+      ),
+    [profiles.data],
+  );
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -136,40 +95,21 @@ function AdminCustomers() {
       return;
     }
     setSaving(true);
-    const { error: profileError } = await supabase
-      .from("profiles")
-      .update({
+    try {
+      await api.patch(`/admin/customers/${selected.id}`, {
         full_name: form.full_name.trim() || null,
         phone: form.phone.trim() || null,
         status: form.status,
-      })
-      .eq("id", selected.id);
-    if (profileError) {
+        isAdmin: form.isAdmin,
+      });
+    } catch (error) {
       setSaving(false);
-      return toast.error(profileError.message);
+      return toast.error(errorMessage(error));
     }
-
-    const existingAdminRole = (roles.data ?? []).find(
-      (role) => role.user_id === selected.id && role.role === "admin",
-    );
-    let roleError = null;
-    if (form.isAdmin && !existingAdminRole) {
-      ({ error: roleError } = await supabase
-        .from("user_roles")
-        .insert({ user_id: selected.id, role: "admin" }));
-    } else if (!form.isAdmin && existingAdminRole) {
-      ({ error: roleError } = await supabase
-        .from("user_roles")
-        .delete()
-        .eq("id", existingAdminRole.id));
-    }
-
     setSaving(false);
-    if (roleError) return toast.error(roleError.message);
     toast.success("Customer updated");
     setSelected(null);
     profiles.refetch();
-    roles.refetch();
   };
 
   const toggleStatus = async (profile: Profile) => {
@@ -178,11 +118,11 @@ function AdminCustomers() {
       return;
     }
     const nextStatus = profile.status === "active" ? "suspended" : "active";
-    const { error } = await supabase
-      .from("profiles")
-      .update({ status: nextStatus })
-      .eq("id", profile.id);
-    if (error) return toast.error(error.message);
+    try {
+      await api.patch(`/admin/customers/${profile.id}`, { status: nextStatus });
+    } catch (error) {
+      return toast.error(errorMessage(error));
+    }
     toast.success(nextStatus === "active" ? "Customer reactivated" : "Customer suspended");
     profiles.refetch();
   };
@@ -192,10 +132,11 @@ function AdminCustomers() {
       toast.error("This customer has no email on file");
       return;
     }
-    const { error } = await supabase.auth.resetPasswordForEmail(profile.email, {
-      redirectTo: `${window.location.origin}/auth/reset`,
-    });
-    if (error) return toast.error(error.message);
+    try {
+      await api.post(`/admin/customers/${profile.id}/password-reset`);
+    } catch (error) {
+      return toast.error(errorMessage(error));
+    }
     toast.success(`Password reset link sent to ${profile.email}`);
   };
 
@@ -308,7 +249,9 @@ function AdminCustomers() {
                         size="icon"
                         onClick={() => toggleStatus(profile)}
                         disabled={profile.id === user?.id}
-                        title={profile.status === "active" ? "Suspend customer" : "Reactivate customer"}
+                        title={
+                          profile.status === "active" ? "Suspend customer" : "Reactivate customer"
+                        }
                       >
                         {profile.status === "active" ? (
                           <Ban className="h-4 w-4 text-destructive" />

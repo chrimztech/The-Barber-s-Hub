@@ -3,7 +3,8 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AdminGuard } from "@/components/admin/AdminGuard";
 import { ImageUpload } from "@/components/admin/ImageUpload";
-import { supabase } from "@/integrations/supabase/client";
+import { api, errorMessage } from "@/lib/api/client";
+import type { Barber as BarberRow } from "@/lib/api/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -47,23 +48,29 @@ function AdminBarbers() {
 
   const list = useQuery({
     queryKey: ["admin-barbers"],
-    queryFn: async () => (await supabase.from("barbers").select("*").order("name")).data ?? [],
+    queryFn: () => api.get<BarberRow[]>("/admin/barbers"),
   });
 
   const save = async () => {
     if (!form.name.trim()) return toast.error("Name required");
-    const { error } = form.id
-      ? await supabase.from("barbers").update(form).eq("id", form.id)
-      : await supabase.from("barbers").insert(form);
-    if (error) return toast.error(error.message);
+    const { id, ...payload } = form;
+    try {
+      if (id) await api.put(`/admin/barbers/${id}`, payload);
+      else await api.post("/admin/barbers", payload);
+    } catch (error) {
+      return toast.error(errorMessage(error));
+    }
     toast.success("Saved");
     setOpen(false);
     list.refetch();
   };
   const remove = async (id: string) => {
     if (!confirm("Delete this barber?")) return;
-    const { error } = await supabase.from("barbers").delete().eq("id", id);
-    if (error) return toast.error(error.message);
+    try {
+      await api.delete(`/admin/barbers/${id}`);
+    } catch (error) {
+      return toast.error(errorMessage(error));
+    }
     list.refetch();
   };
 
