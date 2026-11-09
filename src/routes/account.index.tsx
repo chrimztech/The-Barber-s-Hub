@@ -9,7 +9,8 @@ import { RouteError } from "@/components/site/RouteError";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
-import { supabase } from "@/integrations/supabase/client";
+import { api, errorMessage } from "@/lib/api/client";
+import type { Booking, Order, Profile } from "@/lib/api/types";
 import { formatCurrency, formatDate } from "@/lib/format";
 
 export const Route = createFileRoute("/account/")({
@@ -30,53 +31,28 @@ function Account() {
   const profile = useQuery({
     enabled: !!user,
     queryKey: ["my-profile", user?.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("full_name")
-        .eq("id", user!.id)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => api.get<Profile | null>("/me/profile"),
   });
 
   const bookings = useQuery({
     enabled: !!user,
     queryKey: ["my-bookings", user?.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("bookings")
-        .select("*, services(name), barbers(name)")
-        .eq("user_id", user!.id)
-        .order("booking_date", { ascending: false });
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => api.get<Booking[]>("/me/bookings"),
   });
 
   const orders = useQuery({
     enabled: !!user,
     queryKey: ["my-orders", user?.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("orders")
-        .select("*")
-        .eq("user_id", user!.id)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => api.get<Order[]>("/me/orders"),
   });
 
   const cancelBooking = async (id: string) => {
     if (!user || !confirm("Cancel this appointment?")) return;
-    const { error } = await supabase
-      .from("bookings")
-      .update({ status: "cancelled" })
-      .eq("id", id)
-      .eq("user_id", user.id);
-    if (error) return toast.error(error.message);
+    try {
+      await api.post(`/me/bookings/${id}/cancel`);
+    } catch (error) {
+      return toast.error(errorMessage(error));
+    }
     toast.success("Appointment cancelled");
     bookings.refetch();
   };
@@ -134,14 +110,11 @@ function Account() {
                 className="flex flex-wrap items-center justify-between gap-3 p-4"
               >
                 <div>
-                  <div className="font-medium">
-                    {(booking.services as { name?: string } | null)?.name ?? "Service"}
-                  </div>
+                  <div className="font-medium">{booking.services?.name ?? "Service"}</div>
                   <div className="text-sm text-muted-foreground">
                     {formatDate(`${booking.booking_date}T00:00:00`)} ·{" "}
                     {booking.booking_time.slice(0, 5)}
-                    {(booking.barbers as { name?: string } | null)?.name &&
-                      ` · ${(booking.barbers as { name: string }).name}`}
+                    {booking.barbers?.name && ` · ${booking.barbers.name}`}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">

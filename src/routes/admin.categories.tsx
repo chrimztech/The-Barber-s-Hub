@@ -3,7 +3,8 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AdminGuard } from "@/components/admin/AdminGuard";
 import { ImageUpload } from "@/components/admin/ImageUpload";
-import { supabase } from "@/integrations/supabase/client";
+import { api, errorMessage } from "@/lib/api/client";
+import type { Category } from "@/lib/api/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -40,36 +41,36 @@ type Cat = {
 };
 const empty: Cat = { name: "", slug: "", description: "", image_url: null, status: "active" };
 
-function CategoryPanel({
-  table,
-  title,
-}: {
-  table: "service_categories" | "product_categories";
-  title: string;
-}) {
+function CategoryPanel({ table, title }: { table: "service" | "product"; title: string }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<Cat>(empty);
 
   const list = useQuery({
     queryKey: ["cats", table],
-    queryFn: async () => (await supabase.from(table).select("*").order("name")).data ?? [],
+    queryFn: () => api.get<Category[]>(`/admin/categories/${table}`),
   });
 
   const save = async () => {
     if (!form.name.trim()) return toast.error("Name required");
-    const payload = { ...form, slug: form.slug || slugify(form.name) };
-    const { error } = form.id
-      ? await supabase.from(table).update(payload).eq("id", form.id)
-      : await supabase.from(table).insert(payload);
-    if (error) return toast.error(error.message);
+    const { id, ...fields } = form;
+    const payload = { ...fields, slug: form.slug || slugify(form.name) };
+    try {
+      if (id) await api.put(`/admin/categories/${table}/${id}`, payload);
+      else await api.post(`/admin/categories/${table}`, payload);
+    } catch (error) {
+      return toast.error(errorMessage(error));
+    }
     toast.success("Saved");
     setOpen(false);
     list.refetch();
   };
   const remove = async (id: string) => {
     if (!confirm("Delete?")) return;
-    const { error } = await supabase.from(table).delete().eq("id", id);
-    if (error) return toast.error(error.message);
+    try {
+      await api.delete(`/admin/categories/${table}/${id}`);
+    } catch (error) {
+      return toast.error(errorMessage(error));
+    }
     list.refetch();
   };
 
@@ -207,8 +208,8 @@ function AdminCategories() {
   return (
     <AdminGuard>
       <div className="grid md:grid-cols-2 gap-10">
-        <CategoryPanel table="service_categories" title="Service categories" />
-        <CategoryPanel table="product_categories" title="Product categories" />
+        <CategoryPanel table="service" title="Service categories" />
+        <CategoryPanel table="product" title="Product categories" />
       </div>
     </AdminGuard>
   );

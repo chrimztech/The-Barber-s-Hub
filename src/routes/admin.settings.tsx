@@ -7,15 +7,21 @@ import { AdminPageHeader } from "@/components/admin/AdminUi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
+  defaultBookingSettings,
   defaultBusinessSettings,
   defaultCommerceSettings,
+  defaultPaymentSettings,
   useSiteSettings,
+  WEEKDAYS,
+  type BookingSettings,
   type BusinessSettings,
   type CommerceSettings,
+  type PaymentSettings,
+  type Weekday,
 } from "@/hooks/useSiteSettings";
-import { supabase } from "@/integrations/supabase/client";
-import type { Json } from "@/integrations/supabase/types";
+import { api, errorMessage } from "@/lib/api/client";
 
 export const Route = createFileRoute("/admin/settings")({
   head: () => ({ meta: [{ title: "Settings - Admin" }] }),
@@ -26,14 +32,21 @@ function AdminSettings() {
   const settings = useSiteSettings();
   const [business, setBusiness] = useState<BusinessSettings>(defaultBusinessSettings);
   const [commerce, setCommerce] = useState<CommerceSettings>(defaultCommerceSettings);
+  const [booking, setBooking] = useState<BookingSettings>(defaultBookingSettings);
+  const [payments, setPayments] = useState<PaymentSettings>(defaultPaymentSettings);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (settings.data) {
       setBusiness(settings.data.business);
       setCommerce(settings.data.commerce);
+      setBooking(settings.data.booking);
+      setPayments(settings.data.payments);
     }
   }, [settings.data]);
+
+  const setDay = (day: Weekday, hours: BookingSettings["hours"][Weekday]) =>
+    setBooking({ ...booking, hours: { ...booking.hours, [day]: hours } });
 
   const save = async () => {
     const deliveryFee = Number(commerce.delivery_fee);
@@ -43,23 +56,24 @@ function AdminSettings() {
       return toast.error("Delivery fee must be a non-negative number");
     if (!Number.isInteger(lowStock) || lowStock < 0)
       return toast.error("Low stock threshold must be a whole number");
+    for (const { key, label } of WEEKDAYS) {
+      const day = booking.hours[key];
+      if (day && day.open >= day.close)
+        return toast.error(`${label}: closing must be after opening`);
+    }
     setSaving(true);
-    const { error } = await supabase.from("settings").upsert(
-      [
-        { key: "business", value: business as unknown as Json },
-        {
-          key: "commerce",
-          value: {
-            ...commerce,
-            delivery_fee: deliveryFee,
-            low_stock_threshold: lowStock,
-          } as unknown as Json,
-        },
-      ],
-      { onConflict: "key" },
-    );
+    try {
+      await api.put("/admin/settings", {
+        business,
+        commerce: { ...commerce, delivery_fee: deliveryFee, low_stock_threshold: lowStock },
+        booking: { ...booking, slot_minutes: Number(booking.slot_minutes) },
+        payments,
+      });
+    } catch (error) {
+      setSaving(false);
+      return toast.error(errorMessage(error));
+    }
     setSaving(false);
-    if (error) return toast.error(error.message);
     toast.success("Settings saved");
     settings.refetch();
   };
@@ -82,7 +96,7 @@ function AdminSettings() {
 
       {settings.isError && (
         <div className="mb-5 border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive-foreground">
-          Settings could not be loaded. Apply the latest Supabase migration before saving.
+          Settings could not be loaded. Check that the API is running before saving.
         </div>
       )}
 
@@ -131,10 +145,106 @@ function AdminSettings() {
               />
             </div>
             <div>
-              <Label>Opening hours</Label>
+              <Label>Opening hours (text shown on the site)</Label>
               <Input
                 value={business.hours}
                 onChange={(event) => setBusiness({ ...business, hours: event.target.value })}
+              />
+            </div>
+          </div>
+
+          <h3 className="mt-8 font-display text-xl">Booking hours</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Customers can only book within these hours. Times are studio-local.
+          </p>
+          <div className="mt-4 grid gap-3 border border-border/60 p-5">
+            {WEEKDAYS.map(({ key, label }) => {
+              const day = booking.hours[key];
+              return (
+                <div key={key} className="grid grid-cols-[110px_auto_1fr] items-center gap-3">
+                  <span className="text-sm">{label}</span>
+                  <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      checked={!!day}
+                      onChange={(event) =>
+                        setDay(key, event.target.checked ? { open: "09:00", close: "18:00" } : null)
+                      }
+                    />
+                    Open
+                  </label>
+                  {day ? (
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="time"
+                        aria-label={`${label} opening time`}
+                        value={day.open}
+                        onChange={(event) => setDay(key, { ...day, open: event.target.value })}
+                      />
+                      <span className="text-muted-foreground">–</span>
+                      <Input
+                        type="time"
+                        aria-label={`${label} closing time`}
+                        value={day.close}
+                        onChange={(event) => setDay(key, { ...day, close: event.target.value })}
+                      />
+                    </div>
+                  ) : (
+                    <span className="text-sm text-muted-foreground">Closed</span>
+                  )}
+                </div>
+              );
+            })}
+            <div className="mt-2">
+              <Label>Time between appointment slots</Label>
+              <select
+                className="mt-1.5 h-10 w-full rounded-md border border-border bg-input px-3 text-sm"
+                value={booking.slot_minutes}
+                onChange={(event) =>
+                  setBooking({ ...booking, slot_minutes: Number(event.target.value) })
+                }
+              >
+                {[15, 20, 30, 45, 60, 90, 120].map((minutes) => (
+                  <option key={minutes} value={minutes}>
+                    Every {minutes} minutes
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <h3 className="mt-8 font-display text-xl">Payment details</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Shown at checkout and on the order page for mobile money and bank transfer orders.
+          </p>
+          <div className="mt-4 grid gap-4 border border-border/60 p-5">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <Label>Mobile money number</Label>
+                <Input
+                  value={payments.mobile_money_number}
+                  onChange={(event) =>
+                    setPayments({ ...payments, mobile_money_number: event.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <Label>Registered name</Label>
+                <Input
+                  value={payments.mobile_money_name}
+                  onChange={(event) =>
+                    setPayments({ ...payments, mobile_money_name: event.target.value })
+                  }
+                />
+              </div>
+            </div>
+            <div>
+              <Label>Bank transfer details</Label>
+              <Textarea
+                rows={3}
+                placeholder={"Bank, branch, account name, account number"}
+                value={payments.bank_details}
+                onChange={(event) => setPayments({ ...payments, bank_details: event.target.value })}
               />
             </div>
           </div>

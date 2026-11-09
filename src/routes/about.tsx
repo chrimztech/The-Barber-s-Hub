@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { SiteLayout } from "@/components/site/Layout";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/lib/api/client";
+import type { Barber } from "@/lib/api/types";
 
 export const Route = createFileRoute("/about")({
   head: () => ({
@@ -16,8 +17,7 @@ export const Route = createFileRoute("/about")({
 function About() {
   const { data } = useQuery({
     queryKey: ["barbers"],
-    queryFn: async () =>
-      (await supabase.from("barbers").select("*").eq("status", "active")).data ?? [],
+    queryFn: () => api.get<Barber[]>("/barbers"),
   });
   return (
     <SiteLayout>

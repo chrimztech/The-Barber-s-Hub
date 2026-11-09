@@ -1,19 +1,19 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { z } from "zod";
 import { SiteLayout } from "@/components/site/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { supabase } from "@/integrations/supabase/client";
+import { api, errorMessage } from "@/lib/api/client";
+import type { Availability, Barber, Service } from "@/lib/api/types";
 import { useAuth } from "@/hooks/useAuth";
 import { RouteError } from "@/components/site/RouteError";
 import { toast } from "sonner";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { formatCurrency } from "@/lib/format";
-import type { Json } from "@/integrations/supabase/types";
 
 export const Route = createFileRoute("/book")({
   validateSearch: (search: Record<string, unknown>): { service?: string } => ({
@@ -28,20 +28,6 @@ export const Route = createFileRoute("/book")({
   component: Book,
   errorComponent: RouteError,
 });
-
-const slots = [
-  "09:00",
-  "10:00",
-  "11:00",
-  "12:00",
-  "13:00",
-  "14:00",
-  "15:00",
-  "16:00",
-  "17:00",
-  "18:00",
-  "19:00",
-];
 
 const schema = z.object({
   service_id: z.string().uuid("Pick a service"),
@@ -61,27 +47,71 @@ function Book() {
   const { commerce } = useSiteSettings();
   const services = useQuery({
     queryKey: ["svc"],
-    queryFn: async () =>
-      (await supabase.from("services").select("id,name,price,duration").eq("status", "active"))
-        .data ?? [],
+    queryFn: () => api.get<Service[]>("/services"),
   });
   const barbers = useQuery({
     queryKey: ["barbers"],
-    queryFn: async () =>
-      (await supabase.from("barbers").select("id,name").eq("status", "active")).data ?? [],
+    queryFn: () => api.get<Barber[]>("/barbers"),
   });
 
   const [form, setForm] = useState({
     service_id: search.service ?? "",
     barber_id: "",
-    customer_name: "",
+    customer_name: user?.full_name ?? "",
     customer_email: "",
-    customer_phone: "",
+    customer_phone: user?.phone ?? "",
     booking_date: "",
     booking_time: "",
     customer_note: "",
   });
   const [saving, setSaving] = useState(false);
+
+  // Fill in the signed-in customer's details once their session has loaded.
+  useEffect(() => {
+    if (!user) return;
+    setForm((current) => ({
+      ...current,
+      customer_name: current.customer_name || user.full_name || "",
+      customer_phone: current.customer_phone || user.phone || "",
+    }));
+  }, [user]);
+
+  // Real availability for the chosen date, service, and barber (opening hours,
+  // past times today, and already-booked slots are all excluded by the API).
+  const availability = useQuery({
+    enabled: !!form.booking_date,
+    queryKey: ["availability", form.booking_date, form.service_id, form.barber_id],
+    queryFn: () =>
+      api.get<Availability>("/bookings/availability", {
+        date: form.booking_date,
+        service_id: form.service_id || undefined,
+        barber_id: form.barber_id || undefined,
+      }),
+  });
+  const openSlots = (availability.data?.slots ?? []).filter((slot) => slot.available);
+
+  // Drop the chosen time if it stops being available (e.g. the barber changed).
+  useEffect(() => {
+    if (
+      form.booking_time &&
+      availability.data &&
+      !openSlots.some((s) => s.time === form.booking_time)
+    ) {
+      setForm((current) => ({ ...current, booking_time: "" }));
+    }
+  }, [availability.data]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const timePlaceholder = !form.booking_date
+    ? "Pick a date first"
+    : availability.isLoading
+      ? "Checking availability…"
+      : availability.isError
+        ? "Couldn't load times"
+        : availability.data && !availability.data.open
+          ? "Closed on this day"
+          : openSlots.length === 0
+            ? "Fully booked — try another day"
+            : "Pick a time…";
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -96,14 +126,14 @@ function Book() {
       barber_id: form.barber_id || null,
       customer_email: form.customer_email || null,
     };
-    const { error } = await supabase.rpc("create_booking", {
-      _booking: payload as unknown as Json,
-    });
-    setSaving(false);
-    if (error) {
-      toast.error(error.message);
+    try {
+      await api.post("/bookings", payload);
+    } catch (error) {
+      setSaving(false);
+      toast.error(errorMessage(error));
       return;
     }
+    setSaving(false);
     toast.success("Booking received! We'll confirm shortly.");
     navigate({ to: user ? "/account" : "/" });
   };
@@ -169,13 +199,21 @@ function Book() {
             <select
               className="w-full mt-1.5 bg-input border border-border rounded-md px-3 py-2"
               value={form.booking_time}
+              disabled={!form.booking_date || openSlots.length === 0}
               onChange={(e) => setForm({ ...form, booking_time: e.target.value })}
             >
-              <option value="">Pick a time…</option>
-              {slots.map((t) => (
-                <option key={t}>{t}</option>
+              <option value="">{timePlaceholder}</option>
+              {openSlots.map((slot) => (
+                <option key={slot.time} value={slot.time}>
+                  {slot.time}
+                </option>
               ))}
             </select>
+            {availability.data?.hours && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Open {availability.data.hours.open}–{availability.data.hours.close} that day
+              </p>
+            )}
           </div>
           <div>
             <Label>Full name *</Label>

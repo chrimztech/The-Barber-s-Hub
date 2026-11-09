@@ -3,7 +3,8 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AdminGuard } from "@/components/admin/AdminGuard";
 import { ImageUpload } from "@/components/admin/ImageUpload";
-import { supabase } from "@/integrations/supabase/client";
+import { api, errorMessage } from "@/lib/api/client";
+import type { Category, Service } from "@/lib/api/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,8 +21,6 @@ import { toast } from "sonner";
 import { Pencil, Trash2, Plus } from "lucide-react";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { formatCurrency } from "@/lib/format";
-import type { Tables } from "@/integrations/supabase/types";
-import type { Json } from "@/integrations/supabase/types";
 import { GalleryEditor } from "@/components/admin/StructuredEditors";
 
 export const Route = createFileRoute("/admin/services")({
@@ -72,20 +71,18 @@ function AdminServices() {
 
   const services = useQuery({
     queryKey: ["admin-services"],
-    queryFn: async () =>
-      (await supabase.from("services").select("*").order("created_at", { ascending: false }))
-        .data ?? [],
+    queryFn: () => api.get<Service[]>("/admin/services"),
   });
   const cats = useQuery({
     queryKey: ["service-cats"],
-    queryFn: async () => (await supabase.from("service_categories").select("id,name")).data ?? [],
+    queryFn: () => api.get<Category[]>("/admin/categories/service"),
   });
 
   const openNew = () => {
     setForm(empty);
     setOpen(true);
   };
-  const openEdit = (s: Tables<"services">) => {
+  const openEdit = (s: Service) => {
     setForm({
       id: s.id,
       name: s.name,
@@ -113,17 +110,14 @@ function AdminServices() {
       return toast.error("Price must be a non-negative number");
     if (!Number.isInteger(duration) || duration <= 0)
       return toast.error("Duration must be a positive whole number of minutes");
-    const payload = {
-      ...form,
-      slug: form.slug || slugify(form.name),
-      price,
-      duration,
-      gallery_images: form.gallery_images as Json,
-    };
-    const { error } = form.id
-      ? await supabase.from("services").update(payload).eq("id", form.id)
-      : await supabase.from("services").insert(payload);
-    if (error) return toast.error(error.message);
+    const { id, ...fields } = form;
+    const payload = { ...fields, slug: form.slug || slugify(form.name), price, duration };
+    try {
+      if (id) await api.put(`/admin/services/${id}`, payload);
+      else await api.post("/admin/services", payload);
+    } catch (error) {
+      return toast.error(errorMessage(error));
+    }
     toast.success("Saved");
     setOpen(false);
     services.refetch();
@@ -131,8 +125,11 @@ function AdminServices() {
 
   const remove = async (id: string) => {
     if (!confirm("Delete this service?")) return;
-    const { error } = await supabase.from("services").delete().eq("id", id);
-    if (error) return toast.error(error.message);
+    try {
+      await api.delete(`/admin/services/${id}`);
+    } catch (error) {
+      return toast.error(errorMessage(error));
+    }
     toast.success("Deleted");
     services.refetch();
   };

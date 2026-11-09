@@ -23,8 +23,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { supabase } from "@/integrations/supabase/client";
-import type { Tables } from "@/integrations/supabase/types";
+import { api, errorMessage } from "@/lib/api/client";
+import type { Order, OrderItem } from "@/lib/api/types";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
 
@@ -33,7 +33,6 @@ export const Route = createFileRoute("/admin/orders")({
   component: AdminOrders,
 });
 
-type Order = Tables<"orders">;
 const orderStatuses = ["pending", "processing", "shipped", "delivered", "cancelled"];
 const paymentStatuses = ["unpaid", "paid", "failed", "refunded"];
 
@@ -52,28 +51,13 @@ function AdminOrders() {
 
   const orders = useQuery({
     queryKey: ["admin-orders-all"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("orders")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => api.get<Order[]>("/admin/orders"),
   });
 
   const items = useQuery({
     enabled: !!selected,
     queryKey: ["admin-order-items", selected?.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("order_items")
-        .select("*")
-        .eq("order_id", selected!.id)
-        .order("created_at");
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => api.get<OrderItem[]>(`/admin/orders/${selected!.id}/items`),
   });
 
   const filtered = useMemo(() => {
@@ -98,12 +82,16 @@ function AdminOrders() {
   const save = async () => {
     if (!selected) return;
     setSaving(true);
-    const { error } = await supabase
-      .from("orders")
-      .update({ order_status: orderStatus, payment_status: paymentStatus })
-      .eq("id", selected.id);
+    try {
+      await api.patch(`/admin/orders/${selected.id}`, {
+        order_status: orderStatus,
+        payment_status: paymentStatus,
+      });
+    } catch (error) {
+      setSaving(false);
+      return toast.error(errorMessage(error));
+    }
     setSaving(false);
-    if (error) return toast.error(error.message);
     toast.success("Order updated");
     setSelected(null);
     orders.refetch();
@@ -325,6 +313,26 @@ function AdminOrders() {
                   <p className="mt-1 text-sm">{selected.order_note}</p>
                 </div>
               )}
+
+              <div>
+                <div className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Payment
+                </div>
+                <p className="mt-1 text-sm capitalize">
+                  {selected.payment_method.replaceAll("_", " ")}
+                </p>
+                {selected.payment_reference ? (
+                  <p className="text-sm">
+                    Customer's reference:{" "}
+                    <span className="font-medium text-primary">{selected.payment_reference}</span>
+                    <span className="text-muted-foreground"> — verify it, then mark as paid.</span>
+                  </p>
+                ) : (
+                  selected.payment_method !== "cash_on_delivery" && (
+                    <p className="text-sm text-muted-foreground">No payment reference yet.</p>
+                  )
+                )}
+              </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>

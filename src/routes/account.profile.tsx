@@ -10,7 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
+import { api, errorMessage } from "@/lib/api/client";
+import type { AuthResponse, Profile } from "@/lib/api/types";
 
 export const Route = createFileRoute("/account/profile")({
   head: () => ({ meta: [{ title: "Profile - Deepcuts Hair Studio" }] }),
@@ -19,11 +20,12 @@ export const Route = createFileRoute("/account/profile")({
 });
 
 function AccountProfile() {
-  const { user, loading, signOut } = useAuth();
+  const { user, loading, signOut, refresh, acceptSession } = useAuth();
   const navigate = useNavigate();
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
   const [deactivating, setDeactivating] = useState(false);
@@ -35,15 +37,7 @@ function AccountProfile() {
   const profile = useQuery({
     enabled: !!user,
     queryKey: ["my-profile", user?.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", user!.id)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => api.get<Profile | null>("/me/profile"),
   });
 
   useEffect(() => {
@@ -58,27 +52,38 @@ function AccountProfile() {
     if (!user) return;
     if (fullName.trim().length < 2) return toast.error("Enter your full name");
     setSavingProfile(true);
-    const { error } = await supabase.from("profiles").upsert({
-      id: user.id,
-      email: user.email ?? null,
-      full_name: fullName.trim(),
-      phone: phone.trim() || null,
-    });
+    try {
+      await api.patch("/me/profile", { full_name: fullName.trim(), phone: phone.trim() || null });
+    } catch (error) {
+      setSavingProfile(false);
+      return toast.error(errorMessage(error));
+    }
     setSavingProfile(false);
-    if (error) return toast.error(error.message);
     toast.success("Profile saved");
     profile.refetch();
+    refresh();
   };
 
   const changePassword = async (event: React.FormEvent) => {
     event.preventDefault();
     if (password.length < 8) return toast.error("Password must be at least 8 characters");
+    if (user?.hasPassword && !currentPassword) return toast.error("Enter your current password");
     setSavingPassword(true);
-    const { error } = await supabase.auth.updateUser({ password });
+    try {
+      // Other devices are signed out; this one receives a fresh session.
+      const session = await api.post<AuthResponse>("/auth/change-password", {
+        password,
+        current_password: currentPassword || undefined,
+      });
+      acceptSession(session);
+    } catch (error) {
+      setSavingPassword(false);
+      return toast.error(errorMessage(error));
+    }
     setSavingPassword(false);
-    if (error) return toast.error(error.message);
     setPassword("");
-    toast.success("Password updated");
+    setCurrentPassword("");
+    toast.success("Password updated. Other devices have been signed out.");
   };
 
   const deactivateAccount = async () => {
@@ -91,13 +96,11 @@ function AccountProfile() {
       return;
     }
     setDeactivating(true);
-    const { error } = await supabase
-      .from("profiles")
-      .update({ status: "suspended" })
-      .eq("id", user.id);
-    if (error) {
+    try {
+      await api.post("/me/deactivate");
+    } catch (error) {
       setDeactivating(false);
-      return toast.error(error.message);
+      return toast.error(errorMessage(error));
     }
     await signOut();
     toast.success("Your account has been deactivated");
@@ -151,7 +154,22 @@ function AccountProfile() {
 
           <form onSubmit={changePassword} className="h-fit border border-border/60 p-6">
             <h2 className="font-display text-2xl">Security</h2>
-            <div className="mt-5">
+            {user.hasPassword ? (
+              <div className="mt-5">
+                <Label>Current password</Label>
+                <Input
+                  type="password"
+                  autoComplete="current-password"
+                  value={currentPassword}
+                  onChange={(event) => setCurrentPassword(event.target.value)}
+                />
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-muted-foreground">
+                You sign in with Google. Set a password to also sign in with your email.
+              </p>
+            )}
+            <div className="mt-4">
               <Label>New password</Label>
               <Input
                 type="password"
@@ -175,8 +193,8 @@ function AccountProfile() {
         <div className="mt-8 border border-destructive/40 p-6">
           <h2 className="font-display text-2xl text-destructive">Danger zone</h2>
           <p className="mt-2 max-w-lg text-sm text-muted-foreground">
-            Deactivating your account signs you out and blocks new bookings or orders until an
-            admin reactivates you. Your existing history is kept.
+            Deactivating your account signs you out and blocks new bookings or orders until an admin
+            reactivates you. Your existing history is kept.
           </p>
           <Button
             type="button"

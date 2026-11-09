@@ -3,7 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, Scissors, Star, Truck, ShieldCheck } from "lucide-react";
 import { SiteLayout } from "@/components/site/Layout";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/lib/api/client";
+import type { Product, Service } from "@/lib/api/types";
 import hero from "@/assets/hero-barbershop.jpg";
 import { useCart } from "@/lib/cart";
 import { RouteError } from "@/components/site/RouteError";
@@ -29,27 +30,11 @@ export const Route = createFileRoute("/")({
 function Home() {
   const services = useQuery({
     queryKey: ["featured-services"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("services")
-          .select("*")
-          .eq("is_featured", true)
-          .eq("status", "active")
-          .limit(4)
-      ).data ?? [],
+    queryFn: () => api.get<Service[]>("/services", { featured: true, limit: 4 }),
   });
   const products = useQuery({
     queryKey: ["featured-products"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("products")
-          .select("*")
-          .eq("is_featured", true)
-          .eq("status", "active")
-          .limit(4)
-      ).data ?? [],
+    queryFn: () => api.get<Product[]>("/products", { featured: true, limit: 4 }),
   });
   const { add, items } = useCart();
   const { commerce } = useSiteSettings();

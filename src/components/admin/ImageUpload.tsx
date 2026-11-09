@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/lib/api/client";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Upload, X } from "lucide-react";
@@ -21,15 +21,7 @@ export function ImageUpload({ value, onChange, folder = "uploads", label = "Imag
     }
     setUploading(true);
     try {
-      const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
-      const path = `${folder}/${crypto.randomUUID()}.${ext}`;
-      const { error } = await supabase.storage.from("media").upload(path, file, {
-        cacheControl: "3600",
-        upsert: false,
-      });
-      if (error) throw error;
-      const { data } = supabase.storage.from("media").getPublicUrl(path);
-      onChange(data.publicUrl);
+      onChange(await api.upload(file, folder));
       toast.success("Image uploaded");
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : "Upload failed");

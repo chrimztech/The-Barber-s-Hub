@@ -11,10 +11,10 @@ import { useEffect, type ReactNode } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/hooks/useAuth";
 import { CartProvider } from "@/lib/cart";
-import { supabase } from "@/integrations/supabase/client";
+import { AUTH_CHANGED_EVENT } from "@/lib/api/client";
 
 import appCss from "../styles.css?url";
-import { reportLovableError } from "../lib/lovable-error-reporting";
+import { reportError } from "@/lib/error-reporting";
 
 function NotFoundComponent() {
   return (
@@ -36,7 +36,7 @@ function NotFoundComponent() {
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   const router = useRouter();
   useEffect(() => {
-    reportLovableError(error, { boundary: "root" });
+    reportError(error, { boundary: "root" });
   }, [error]);
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -106,13 +106,12 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const router = useRouter();
   useEffect(() => {
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(() => {
+    const onAuthChange = () => {
       router.invalidate();
       queryClient.invalidateQueries();
-    });
-    return () => subscription.unsubscribe();
+    };
+    window.addEventListener(AUTH_CHANGED_EVENT, onAuthChange);
+    return () => window.removeEventListener(AUTH_CHANGED_EVENT, onAuthChange);
   }, [router, queryClient]);
 
   return (

@@ -24,19 +24,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { supabase } from "@/integrations/supabase/client";
-import type { Tables } from "@/integrations/supabase/types";
+import { api, errorMessage } from "@/lib/api/client";
+import type { Barber, Booking } from "@/lib/api/types";
 import { formatDate } from "@/lib/format";
 
 export const Route = createFileRoute("/admin/bookings")({
   head: () => ({ meta: [{ title: "Bookings - Admin" }] }),
   component: AdminBookings,
 });
-
-type Booking = Tables<"bookings"> & {
-  services: { name: string; price: number; duration: number } | null;
-  barbers: { name: string } | null;
-};
 
 type BookingEdit = Pick<
   Booking,
@@ -55,28 +50,12 @@ function AdminBookings() {
 
   const bookings = useQuery({
     queryKey: ["admin-bookings-all"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("bookings")
-        .select("*, services(name,price,duration), barbers(name)")
-        .order("booking_date", { ascending: false })
-        .order("booking_time", { ascending: false });
-      if (error) throw error;
-      return data as Booking[];
-    },
+    queryFn: () => api.get<Booking[]>("/admin/bookings"),
   });
 
   const barbers = useQuery({
     queryKey: ["admin-booking-barbers"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("barbers")
-        .select("id,name")
-        .eq("status", "active")
-        .order("name");
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => api.get<Barber[]>("/barbers"),
   });
 
   const filtered = useMemo(() => {
@@ -110,9 +89,13 @@ function AdminBookings() {
   const save = async () => {
     if (!selected || !form) return;
     setSaving(true);
-    const { error } = await supabase.from("bookings").update(form).eq("id", selected.id);
+    try {
+      await api.patch(`/admin/bookings/${selected.id}`, form);
+    } catch (error) {
+      setSaving(false);
+      return toast.error(errorMessage(error));
+    }
     setSaving(false);
-    if (error) return toast.error(error.message);
     toast.success("Booking updated");
     setSelected(null);
     setForm(null);
@@ -122,8 +105,11 @@ function AdminBookings() {
   const remove = async () => {
     if (!selected || !confirm(`Permanently delete the booking for ${selected.customer_name}?`))
       return;
-    const { error } = await supabase.from("bookings").delete().eq("id", selected.id);
-    if (error) return toast.error(error.message);
+    try {
+      await api.delete(`/admin/bookings/${selected.id}`);
+    } catch (error) {
+      return toast.error(errorMessage(error));
+    }
     toast.success("Booking deleted");
     setSelected(null);
     setForm(null);

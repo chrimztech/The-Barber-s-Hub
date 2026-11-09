@@ -1,14 +1,20 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, MapPin, Package, ReceiptText } from "lucide-react";
+import { toast } from "sonner";
 import { AccountNav } from "@/components/account/AccountNav";
 import { StatusBadge } from "@/components/admin/AdminUi";
 import { SiteLayout } from "@/components/site/Layout";
+import { PaymentInstructions } from "@/components/site/PaymentInstructions";
 import { RouteError } from "@/components/site/RouteError";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
-import { supabase } from "@/integrations/supabase/client";
+import { api, errorMessage } from "@/lib/api/client";
+import type { OrderWithItems } from "@/lib/api/types";
 import { formatCurrency, formatDate, titleCase } from "@/lib/format";
 
 export const Route = createFileRoute("/account/orders/$id")({
@@ -16,6 +22,50 @@ export const Route = createFileRoute("/account/orders/$id")({
   component: OrderDetail,
   errorComponent: RouteError,
 });
+
+function PaymentReferenceForm({
+  orderId,
+  current,
+  onSaved,
+}: {
+  orderId: string;
+  current: string | null;
+  onSaved: () => void;
+}) {
+  const [reference, setReference] = useState(current ?? "");
+  const [saving, setSaving] = useState(false);
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (reference.trim().length < 3) return toast.error("Enter the transaction ID");
+    setSaving(true);
+    try {
+      await api.post(`/me/orders/${orderId}/payment-reference`, { reference: reference.trim() });
+      toast.success("Thanks! We'll confirm your payment shortly.");
+      onSaved();
+    } catch (error) {
+      toast.error(errorMessage(error));
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <form onSubmit={submit} className="space-y-2">
+      <Label htmlFor="payment-reference">Paid already? Enter the transaction ID</Label>
+      <div className="flex gap-2">
+        <Input
+          id="payment-reference"
+          value={reference}
+          maxLength={100}
+          onChange={(event) => setReference(event.target.value)}
+          placeholder="e.g. MP240101.1234.A12345"
+        />
+        <Button type="submit" variant="outline" disabled={saving}>
+          {saving ? "Saving..." : current ? "Update" : "Send"}
+        </Button>
+      </div>
+    </form>
+  );
+}
 
 function OrderDetail() {
   const { id } = Route.useParams();
@@ -30,31 +80,11 @@ function OrderDetail() {
   const order = useQuery({
     enabled: !!user,
     queryKey: ["my-order", id, user?.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("orders")
-        .select("*")
-        .eq("id", id)
-        .eq("user_id", user!.id)
-        .single();
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => api.get<OrderWithItems>(`/me/orders/${encodeURIComponent(id)}`),
+    retry: false,
   });
-
-  const items = useQuery({
-    enabled: !!order.data,
-    queryKey: ["my-order-items", id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("order_items")
-        .select("*")
-        .eq("order_id", id)
-        .order("created_at");
-      if (error) throw error;
-      return data;
-    },
-  });
+  // Items arrive with the order; kept as a separate object so the markup stays unchanged.
+  const items = { isLoading: order.isLoading, data: order.data?.items };
 
   if (loading || !user) {
     return (
@@ -157,7 +187,27 @@ function OrderDetail() {
                       Payment
                     </div>
                     <div className="mt-1">{titleCase(order.data.payment_method)}</div>
+                    {order.data.payment_reference && (
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        Reference: {order.data.payment_reference}
+                      </div>
+                    )}
                   </div>
+                  {order.data.payment_method !== "cash_on_delivery" &&
+                    order.data.payment_status !== "paid" &&
+                    order.data.order_status !== "cancelled" && (
+                      <div className="mt-4 space-y-3">
+                        <PaymentInstructions
+                          method={order.data.payment_method}
+                          reference={order.data.order_number}
+                        />
+                        <PaymentReferenceForm
+                          orderId={order.data.id}
+                          current={order.data.payment_reference}
+                          onSaved={() => order.refetch()}
+                        />
+                      </div>
+                    )}
                 </div>
                 <div className="border border-border/60 p-5">
                   <div className="flex items-center gap-2">
